@@ -1,0 +1,25 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: urba
+      POSTGRES_PASSWORD: urba
+      POSTGRES_DB: urba_betting
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://urba:urba@db:5432/urba_betting
+    depends_on:
+      - db
+    volumes:
+      - ./backend:/app
+
+volumes:
+  postgres_data:
