@@ -18,6 +18,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from app.api import api_router
+# ...
+app.include_router(api_router)
+
 @app.on_event("startup")
 def create_tables():
     Base.metadata.create_all(bind=engine)
