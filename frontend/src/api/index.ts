@@ -36,3 +36,6 @@ export const getFechaFactores = (temporada: string, fecha_num: number) =>
     api.get<FechaFactores>(`/historial/${temporada}/${fecha_num}`)
 export const saveFechaFactores = (data: Omit<FechaFactores, 'id'>) =>
     api.post<FechaFactores>('/historial', data)
+
+export const getFechaActual = () =>
+    api.get('/urba/fecha-actual')

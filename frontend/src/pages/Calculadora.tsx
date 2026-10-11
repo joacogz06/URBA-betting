@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { getFactores, createFactor, updateFactor, deleteFactor, getPartidos, createCalculo } from '../api'
+import { useSearchParams } from 'react-router-dom'
+import { getFactores, createFactor, updateFactor, deleteFactor, getPartidos, createCalculo, getFechaActual } from '../api'
 import type { Factor, Partido } from '../types'
 
 export default function Calculadora() {
@@ -10,10 +11,21 @@ export default function Calculadora() {
     const [partidoId, setPartidoId] = useState<number | null>(null)
     const [valores, setValores] = useState<Record<number, number>>({})
     const [resultado, setResultado] = useState<{ prob_local: number; prob_visitante: number; stake: number } | null>(null)
+    const [searchParams] = useSearchParams()
 
     useEffect(() => {
         getFactores().then(r => setFactores(r.data))
-        getPartidos({ temporada: '2026' }).then(r => setPartidos(r.data))
+        getFechaActual().then(fechaRes => {
+            const fechaNum = fechaRes.data?.fecha_num
+            const params = fechaNum
+                ? { temporada: '2026', fecha_num: fechaNum }
+                : { temporada: '2026' }
+            getPartidos(params).then(r => {
+                setPartidos(r.data)
+                const partidoParam = searchParams.get('partido')
+                if (partidoParam) setPartidoId(Number(partidoParam))
+            })
+        })
     }, [])
 
     const sumaP = factores.reduce((s, f) => s + f.peso, 0)
@@ -51,7 +63,6 @@ export default function Calculadora() {
 
     return (
         <div className="p-6 space-y-4">
-            {/* Factores y pesos */}
             <div className="bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">
                 <div className="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -66,7 +77,7 @@ export default function Calculadora() {
                         onClick={() => setEditando(!editando)}
                         className="border border-gray-600 text-gray-400 hover:text-white text-xs px-3 py-1 rounded transition-colors"
                     >
-                        {editando ? '✓ Guardando...' : '⚙ Editar'}
+                        {editando ? '✓ Listo' : '⚙ Editar'}
                     </button>
                 </div>
 
@@ -119,7 +130,6 @@ export default function Calculadora() {
                 )}
             </div>
 
-            {/* Calculadora */}
             <div className="bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">
                 <div className="px-4 py-3 border-b border-gray-700">
                     <h2 className="text-xs font-semibold text-green-400 tracking-widest uppercase">
@@ -127,9 +137,8 @@ export default function Calculadora() {
                     </h2>
                 </div>
                 <div className="p-4 space-y-6">
-                    {/* Selector de partido */}
                     <div>
-                        <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">Partido — Temporada 2026</div>
+                        <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">Partido — Fecha {searchParams.get('partido') ? partidoSeleccionado?.fecha_num : 'actual'}</div>
                         <select
                             value={partidoId ?? ''}
                             onChange={e => { setPartidoId(Number(e.target.value)); setResultado(null) }}
@@ -138,13 +147,12 @@ export default function Calculadora() {
                             <option value="">— Elegí un partido —</option>
                             {partidos.map(p => (
                                 <option key={p.id} value={p.id}>
-                                    Fecha {p.fecha_num} — {p.local} vs {p.visitante}
+                                    {p.local} vs {p.visitante}
                                 </option>
                             ))}
                         </select>
                     </div>
 
-                    {/* Sliders */}
                     {partidoId && (
                         <div>
                             <div className="text-xs text-gray-500 uppercase tracking-wider mb-4">
@@ -178,7 +186,6 @@ export default function Calculadora() {
                         </div>
                     )}
 
-                    {/* Resultado */}
                     {resultado && partidoSeleccionado && (
                         <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
                             <div className="grid grid-cols-2 gap-4 text-center">
@@ -194,7 +201,6 @@ export default function Calculadora() {
                         </div>
                     )}
 
-                    {/* Botones */}
                     <div className="flex justify-end gap-3">
                         <button
                             onClick={() => { setValores({}); setResultado(null) }}
