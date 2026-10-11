@@ -55,13 +55,15 @@ class PartidoOut(PartidoBase):
 # ── Calculos ──────────────────────────────────────────────
 class CalculoCreate(BaseModel):
     partido_id: int
+    valores_factores: dict  # {nombre_factor: valor (-2 a 2)}
+
+class CalculoOut(BaseModel):
+    id: int
+    partido_id: int
     probabilidad_local: float
     probabilidad_visitante: float
     valores_factores: dict
     pesos_factores: dict
-
-class CalculoOut(CalculoCreate):
-    id: int
     created_at: datetime
     model_config = {"from_attributes": True}
 
