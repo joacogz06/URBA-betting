@@ -19,6 +19,8 @@ export const createCalculo = (data: { partido_id: number; valores_factores: Reco
     api.post<Calculo>('/calculos', data)
 export const getCalculosByPartido = (partido_id: number) =>
     api.get<Calculo[]>(`/calculos/partido/${partido_id}`)
+export const getUltimosCalculos = () =>
+    api.get<Record<number, { prob_local: number; prob_visitante: number }>>('/calculos/ultimos')
 
 // Apuestas
 export const getApuestas = () => api.get<Apuesta[]>('/apuestas')
