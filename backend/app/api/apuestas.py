@@ -1,10 +1,47 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from app.database import get_db
-from app.models.models import Apuesta
+from app.models.models import Apuesta, Config
 from app.schemas.schemas import ApuestaCreate, ApuestaResultado, ApuestaOut
 
 router = APIRouter(prefix="/apuestas", tags=["apuestas"])
+
+BANKROLL_KEY = "bankroll_inicial"
+BANKROLL_DEFAULT = 1000.0
+
+
+def _get_bankroll_inicial(db: Session) -> float:
+    row = db.query(Config).filter(Config.clave == BANKROLL_KEY).first()
+    return float(row.valor) if row else BANKROLL_DEFAULT
+
+
+@router.get("/bankroll")
+def obtener_bankroll(db: Session = Depends(get_db)):
+    bankroll_inicial = _get_bankroll_inicial(db)
+    ganancia = db.query(func.sum(Apuesta.ganancia_neta)).filter(Apuesta.ganancia_neta.isnot(None)).scalar() or 0.0
+    return {
+        "bankroll_inicial": bankroll_inicial,
+        "bankroll": round(bankroll_inicial + ganancia, 2),
+        "ganancia_total": round(ganancia, 2),
+    }
+
+
+@router.patch("/bankroll")
+def actualizar_bankroll(payload: dict, db: Session = Depends(get_db)):
+    nuevo = float(payload.get("bankroll_inicial", BANKROLL_DEFAULT))
+    row = db.query(Config).filter(Config.clave == BANKROLL_KEY).first()
+    if row:
+        row.valor = str(nuevo)
+    else:
+        db.add(Config(clave=BANKROLL_KEY, valor=str(nuevo)))
+    db.commit()
+    ganancia = db.query(func.sum(Apuesta.ganancia_neta)).filter(Apuesta.ganancia_neta.isnot(None)).scalar() or 0.0
+    return {
+        "bankroll_inicial": nuevo,
+        "bankroll": round(nuevo + ganancia, 2),
+        "ganancia_total": round(ganancia, 2),
+    }
 
 
 @router.get("/", response_model=list[ApuestaOut])

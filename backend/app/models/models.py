@@ -97,3 +97,9 @@ class FechaFactores(Base):
     factores: Mapped[list] = mapped_column(JSON, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+class Config(Base):
+    __tablename__ = "config"
+
+    clave: Mapped[str] = mapped_column(String(50), primary_key=True)
+    valor: Mapped[str] = mapped_column(String(200), nullable=False)

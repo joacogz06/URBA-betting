@@ -19,8 +19,26 @@ export const createCalculo = (data: { partido_id: number; valores_factores: Reco
     api.post<Calculo>('/calculos', data)
 export const getCalculosByPartido = (partido_id: number) =>
     api.get<Calculo[]>(`/calculos/partido/${partido_id}`)
+export type AnalisisCasa = {
+    cuota: number
+    prob_casa: number
+    edge: number
+    apostar_a: 'local' | 'visitante' | null
+    kelly_fraccion: number
+    hay_valor: boolean
+} | null
+
+export type UltimoCalculo = {
+    prob_local: number
+    prob_visitante: number
+    hay_valor: boolean
+    mejor_casa: 'betsson' | 'codere' | null
+    betsson: AnalisisCasa
+    codere: AnalisisCasa
+}
+
 export const getUltimosCalculos = () =>
-    api.get<Record<number, { prob_local: number; prob_visitante: number }>>('/calculos/ultimos')
+    api.get<Record<number, UltimoCalculo>>('/calculos/ultimos')
 
 // Apuestas
 export const getApuestas = () => api.get<Apuesta[]>('/apuestas')
@@ -41,3 +59,9 @@ export const saveFechaFactores = (data: Omit<FechaFactores, 'id'>) =>
 
 export const getFechaActual = () =>
     api.get('/urba/fecha-actual')
+
+export const getBankroll = () =>
+    api.get<{ bankroll: number; bankroll_inicial: number; ganancia_total: number }>('/apuestas/bankroll')
+
+export const updateBankroll = (bankroll_inicial: number) =>
+    api.patch<{ bankroll: number; bankroll_inicial: number; ganancia_total: number }>('/apuestas/bankroll', { bankroll_inicial })
