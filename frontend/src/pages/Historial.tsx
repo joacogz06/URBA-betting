@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { getApuestas, getPartidos, updateResultado } from '../api'
+import { getApuestas, getPartidos, updateResultado, deleteApuesta } from '../api'
 import type { Apuesta, Partido } from '../types'
 
 export default function Historial() {
     const [apuestas, setApuestas] = useState<Apuesta[]>([])
     const [partidos, setPartidos] = useState<Partido[]>([])
     const [loading, setLoading] = useState(true)
+    const [confirmandoCancelar, setConfirmandoCancelar] = useState<number | null>(null)
 
     useEffect(() => {
         Promise.all([
@@ -29,14 +30,19 @@ export default function Historial() {
         (n >= 0 ? '+' : '') + '$' + Math.abs(n).toLocaleString('es-AR')
 
     const handleResultado = async (apuesta: Apuesta, resultado: boolean) => {
-        const cuota = apuesta.cuota
         const ganancia_neta = resultado
-            ? apuesta.stake * (cuota - 1)
+            ? apuesta.stake * (apuesta.cuota - 1)
             : -apuesta.stake
         await updateResultado(apuesta.id, { resultado, ganancia_neta })
         setApuestas(apuestas.map(a =>
             a.id === apuesta.id ? { ...a, resultado, ganancia_neta } : a
         ))
+    }
+
+    const handleCancelar = async (id: number) => {
+        await deleteApuesta(id)
+        setApuestas(apuestas.filter(a => a.id !== id))
+        setConfirmandoCancelar(null)
     }
 
     if (loading) return (
@@ -64,9 +70,7 @@ export default function Historial() {
             {/* Lista de apuestas */}
             <div className="bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">
                 <div className="px-4 py-3 border-b border-gray-700">
-                    <h2 className="text-xs font-semibold text-green-400 tracking-widest uppercase">
-                        Apuestas
-                    </h2>
+                    <h2 className="text-xs font-semibold text-green-400 tracking-widest uppercase">Apuestas</h2>
                 </div>
 
                 {apuestas.length === 0 ? (
@@ -77,6 +81,7 @@ export default function Historial() {
                     <div className="divide-y divide-gray-800">
                         {apuestas.map(a => {
                             const partido = getPartido(a.partido_id)
+                            const cancelando = confirmandoCancelar === a.id
                             return (
                                 <div key={a.id} className="px-4 py-3 flex items-center justify-between hover:bg-gray-800/50">
                                     <div>
@@ -94,29 +99,56 @@ export default function Historial() {
                                             <div className="text-xs text-gray-500">Stake</div>
                                         </div>
 
-                                        {a.resultado === null ? (
-                                            <div className="flex gap-2">
+                                        {cancelando ? (
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs text-gray-400">¿Cancelar apuesta?</span>
                                                 <button
-                                                    onClick={() => handleResultado(a, true)}
-                                                    className="text-xs px-3 py-1 border border-green-700 text-green-400 hover:bg-green-700 hover:text-white rounded transition-colors"
+                                                    onClick={() => handleCancelar(a.id)}
+                                                    className="text-xs px-3 py-1 bg-red-700 hover:bg-red-600 text-white rounded transition-colors"
                                                 >
-                                                    ✓ Ganada
+                                                    Sí, cancelar
                                                 </button>
                                                 <button
-                                                    onClick={() => handleResultado(a, false)}
-                                                    className="text-xs px-3 py-1 border border-red-700 text-red-400 hover:bg-red-700 hover:text-white rounded transition-colors"
+                                                    onClick={() => setConfirmandoCancelar(null)}
+                                                    className="text-xs px-3 py-1 border border-gray-600 text-gray-400 hover:text-white rounded transition-colors"
                                                 >
-                                                    ✕ Perdida
+                                                    No
                                                 </button>
                                             </div>
                                         ) : (
-                                            <div className="text-right">
-                                                <div className={`text-sm font-bold ${a.resultado ? 'text-green-400' : 'text-red-400'}`}>
-                                                    {a.resultado ? '✓ Ganada' : '✕ Perdida'}
-                                                </div>
-                                                <div className={`text-xs ${(a.ganancia_neta ?? 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                                    {formatMoney(a.ganancia_neta ?? 0)}
-                                                </div>
+                                            <div className="flex items-center gap-3">
+                                                {a.resultado === null ? (
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            onClick={() => handleResultado(a, true)}
+                                                            className="text-xs px-3 py-1 border border-green-700 text-green-400 hover:bg-green-700 hover:text-white rounded transition-colors"
+                                                        >
+                                                            ✓ Ganada
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleResultado(a, false)}
+                                                            className="text-xs px-3 py-1 border border-red-700 text-red-400 hover:bg-red-700 hover:text-white rounded transition-colors"
+                                                        >
+                                                            ✕ Perdida
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-right">
+                                                        <div className={`text-sm font-bold ${a.resultado ? 'text-green-400' : 'text-red-400'}`}>
+                                                            {a.resultado ? '✓ Ganada' : '✕ Perdida'}
+                                                        </div>
+                                                        <div className={`text-xs ${(a.ganancia_neta ?? 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                                            {formatMoney(a.ganancia_neta ?? 0)}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                <button
+                                                    onClick={() => setConfirmandoCancelar(a.id)}
+                                                    className="text-xs text-gray-600 hover:text-red-400 transition-colors"
+                                                    title="Cancelar apuesta"
+                                                >
+                                                    ✕
+                                                </button>
                                             </div>
                                         )}
                                     </div>

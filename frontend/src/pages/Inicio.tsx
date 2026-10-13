@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getPartidos, getPosiciones, getFechaActual, getUltimosCalculos, createApuesta, getBankroll, updateBankroll } from '../api'
+import { getPartidos, getPosiciones, getFechaActual, getUltimosCalculos, createApuesta, getBankroll, updateBankroll, getApuestas } from '../api'
 import type { UltimoCalculo, AnalisisCasa } from '../api'
 import api from '../api/client'
 import type { Partido } from '../types'
@@ -27,6 +27,7 @@ export default function Inicio() {
     const [modalApuesta, setModalApuesta] = useState<ModalApuesta | null>(null)
     const [casaSeleccionada, setCasaSeleccionada] = useState<'betsson' | 'codere'>('betsson')
     const [stakeCustom, setStakeCustom] = useState('')
+    const [apuestasExistentes, setApuestasExistentes] = useState<Set<number>>(new Set())
 
     const CHAMP_ID = '2025176'
     const navigate = useNavigate()
@@ -40,18 +41,20 @@ export default function Inicio() {
                     getBankroll(),
                 ])
                 setPosiciones(posRes.data?.positions || posRes.data || [])
-                setBankroll(bankrollRes.data.bankroll_inicial)
+                setBankroll(bankrollRes.data.bankroll)
                 const fechaNum: number | null = fechaRes.data?.fecha_num ?? null
                 setFechaActual(fechaNum)
                 const params = fechaNum
                     ? { temporada: '2026', fecha_num: fechaNum }
                     : { temporada: '2026' }
-                const [partidosRes, calcRes] = await Promise.all([
+                const [partidosRes, calcRes, apuestasRes] = await Promise.all([
                     getPartidos(params),
                     getUltimosCalculos(),
+                    getApuestas(),
                 ])
                 setPartidos(partidosRes.data)
                 setMisCalculos(calcRes.data)
+                setApuestasExistentes(new Set(apuestasRes.data.map(a => a.partido_id)))
             } catch (e) {
                 console.error(e)
             } finally {
@@ -99,7 +102,6 @@ export default function Inicio() {
     const abrirModalApuesta = (partido: Partido) => {
         const calculo = misCalculos[partido.id]
         if (!calculo || bankroll === null) return
-        // Seleccionar por defecto la mejor casa con valor, o la primera disponible
         const defaultCasa = calculo.mejor_casa
             ?? (calculo.betsson ? 'betsson' : calculo.codere ? 'codere' : 'betsson')
         setCasaSeleccionada(defaultCasa as 'betsson' | 'codere')
@@ -119,6 +121,10 @@ export default function Inicio() {
             stake,
             cuota: analisis.cuota,
         })
+        setApuestasExistentes(prev => new Set(prev).add(modalApuesta.partido.id))
+        // Actualizar bankroll mostrado (se descontó el stake)
+        const bankrollRes = await getBankroll()
+        setBankroll(bankrollRes.data.bankroll)
         setModalApuesta(null)
     }
 
@@ -131,7 +137,7 @@ export default function Inicio() {
             {/* Bankroll */}
             <div className="bg-gray-900 border border-gray-700 rounded-lg px-6 py-4 flex items-center justify-between">
                 <div>
-                    <div className="text-xs text-gray-400 tracking-widest uppercase">Bankroll inicial</div>
+                    <div className="text-xs text-gray-400 tracking-widest uppercase">Bankroll</div>
                     {editingBankroll ? (
                         <div className="flex items-center gap-2 mt-1">
                             <input
@@ -222,6 +228,7 @@ export default function Inicio() {
                                 <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500 text-xs">Sin partidos cargados</td></tr>
                             ) : partidos.map(p => {
                                 const calc = misCalculos[p.id]
+                                const yaApostado = apuestasExistentes.has(p.id)
                                 return (
                                     <tr key={p.id} className="border-t border-gray-800 hover:bg-gray-800/50">
                                         <td className="px-4 py-3">
@@ -250,15 +257,23 @@ export default function Inicio() {
                                                     Calcular →
                                                 </button>
                                                 {calc && (
-                                                    <button
-                                                        onClick={() => abrirModalApuesta(p)}
-                                                        className={`text-xs font-semibold px-2 py-1 rounded transition-colors ${calc.hay_valor
-                                                                ? 'bg-green-700 hover:bg-green-600 text-white'
-                                                                : 'bg-red-900/60 hover:bg-red-800/60 text-red-300'
-                                                            }`}
-                                                    >
-                                                        Apostar
-                                                    </button>
+                                                    <div className="flex items-center gap-1">
+                                                        <button
+                                                            onClick={() => abrirModalApuesta(p)}
+                                                            disabled={yaApostado}
+                                                            className={`text-xs font-semibold px-2 py-1 rounded transition-colors ${yaApostado
+                                                                    ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                                                                    : calc.hay_valor
+                                                                        ? 'bg-green-700 hover:bg-green-600 text-white'
+                                                                        : 'bg-red-900/60 hover:bg-red-800/60 text-red-300'
+                                                                }`}
+                                                        >
+                                                            Apostar
+                                                        </button>
+                                                        {yaApostado && (
+                                                            <span className="text-[10px] text-green-400 font-bold">✓</span>
+                                                        )}
+                                                    </div>
                                                 )}
                                             </div>
                                         </td>
@@ -325,11 +340,13 @@ export default function Inicio() {
 
             {/* Modal apostar */}
             {modalApuesta && (() => {
-                const { partido, calculo, bankrollActual } = modalApuesta
-                const casas: Array<{ key: 'betsson' | 'codere'; label: string; data: AnalisisCasa }> = [
-                    { key: 'betsson', label: 'Betsson', data: calculo.betsson },
-                    { key: 'codere', label: 'Codere', data: calculo.codere },
-                ].filter(c => c.data !== null) as Array<{ key: 'betsson' | 'codere'; label: string; data: AnalisisCasa }>
+                const { partido, calculo, bankrollActual } = modalApuesta  // ← esta línea falta
+                const casas: Array<{ key: 'betsson' | 'codere'; label: string }> = (
+                    [
+                        { key: 'betsson' as const, label: 'Betsson' },
+                        { key: 'codere' as const, label: 'Codere' },
+                    ] as Array<{ key: 'betsson' | 'codere'; label: string }>
+                ).filter(c => calculo[c.key] !== null)
 
                 const analisisActual = calculo[casaSeleccionada] as AnalisisCasa
                 const stakeKelly = analisisActual ? Math.round(analisisActual.kelly_fraccion * bankrollActual) : 0
@@ -366,7 +383,7 @@ export default function Inicio() {
                             ) : (
                                 <>
                                     <div className="flex gap-2">
-                                            {casas.map(({ key, label }) => (
+                                        {casas.map(({ key, label }) => (
                                             <button
                                                 key={key}
                                                 onClick={() => { setCasaSeleccionada(key); setStakeCustom('') }}
@@ -387,7 +404,6 @@ export default function Inicio() {
 
                                     {analisisActual && (
                                         <div className="space-y-3">
-                                            {/* Info de la casa */}
                                             <div className="bg-gray-800 rounded-lg p-4 space-y-3">
                                                 <div className="grid grid-cols-3 gap-3 text-center text-xs">
                                                     <div>
@@ -400,7 +416,7 @@ export default function Inicio() {
                                                     </div>
                                                     <div>
                                                         <div className="text-gray-500 mb-1">Edge</div>
-                                                        <div className={`font-bold text-lg ${Math.abs(analisisActual.edge) >= 5 ? (analisisActual.edge > 0 ? 'text-green-400' : 'text-green-400') : 'text-red-400'}`}>
+                                                        <div className={`font-bold text-lg ${Math.abs(analisisActual.edge) >= 5 ? 'text-green-400' : 'text-red-400'}`}>
                                                             {analisisActual.edge > 0 ? '+' : ''}{analisisActual.edge.toFixed(1)}%
                                                         </div>
                                                     </div>
@@ -429,7 +445,6 @@ export default function Inicio() {
                                                 )}
                                             </div>
 
-                                            {/* Stake editable */}
                                             {analisisActual.hay_valor && (
                                                 <div>
                                                     <div className="text-xs text-gray-500 mb-1">

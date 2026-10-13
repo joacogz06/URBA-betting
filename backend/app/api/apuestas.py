@@ -57,7 +57,10 @@ def registrar_apuesta(apuesta: ApuestaCreate, db: Session = Depends(get_db)):
     existente = db.query(Apuesta).filter(Apuesta.partido_id == apuesta.partido_id).first()
     if existente:
         raise HTTPException(status_code=400, detail="Ya existe una apuesta para este partido")
-    db_apuesta = Apuesta(**apuesta.model_dump())
+    db_apuesta = Apuesta(
+        **apuesta.model_dump(),
+        ganancia_neta=-apuesta.stake,   # ← se descuenta al apostar
+    )
     db.add(db_apuesta)
     db.commit()
     db.refresh(db_apuesta)
@@ -70,7 +73,12 @@ def cargar_resultado(apuesta_id: int, resultado: ApuestaResultado, db: Session =
     if not apuesta:
         raise HTTPException(status_code=404, detail="Apuesta no encontrada")
     apuesta.resultado = resultado.resultado
-    apuesta.ganancia_neta = resultado.ganancia_neta
+    if resultado.resultado:
+        # Ganó: ganancia neta = lo que cobró menos lo apostado
+        apuesta.ganancia_neta = round(apuesta.stake * apuesta.cuota - apuesta.stake, 2)
+    else:
+        # Perdió: ya estaba descontado al crear, no cambia
+        apuesta.ganancia_neta = -apuesta.stake
     db.commit()
     db.refresh(apuesta)
     return apuesta

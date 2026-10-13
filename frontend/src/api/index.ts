@@ -65,3 +65,5 @@ export const getBankroll = () =>
 
 export const updateBankroll = (bankroll_inicial: number) =>
     api.patch<{ bankroll: number; bankroll_inicial: number; ganancia_total: number }>('/apuestas/bankroll', { bankroll_inicial })
+
+export const deleteApuesta = (id: number) => api.delete(`/apuestas/${id}`)
