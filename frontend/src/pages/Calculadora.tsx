@@ -12,6 +12,7 @@ export default function Calculadora() {
     const [pesosTemp, setPesosTemp] = useState<Record<number, string>>({})
     const [partidoId, setPartidoId] = useState<number | null>(null)
     const [valores, setValores] = useState<Record<number, number>>({})
+    const [noAplica, setNoAplica] = useState<Record<number, boolean>>({})
     const [resultado, setResultado] = useState<{ prob_local: number; prob_visitante: number; stake: number } | null>(null)
     const [searchParams] = useSearchParams()
 
@@ -40,9 +41,24 @@ export default function Calculadora() {
 
     const sumaP = factores.reduce((s, f) => s + pesoActual(f), 0)
 
-    const porcentaje = (peso: number): string => {
-        if (sumaP <= 0) return '0'
-        return String(Number((peso / sumaP * 100).toFixed(1)))
+    const porcentaje = (peso: number, total: number = sumaP): string => {
+        if (total <= 0) return '0'
+        return String(Number((peso / total * 100).toFixed(1)))
+    }
+
+    // Suma de pesos de los factores que SÍ aplican en este partido
+    const sumaPartido = factores.reduce((s, f) => s + (noAplica[f.id] ? 0 : f.peso), 0)
+    const todosNA = factores.length > 0 && factores.every(f => noAplica[f.id])
+
+    const toggleNA = (id: number) => {
+        setNoAplica(prev => ({ ...prev, [id]: !prev[id] }))
+        setResultado(null)
+    }
+
+    const limpiarCalculadora = () => {
+        setValores({})
+        setNoAplica({})
+        setResultado(null)
     }
 
     const limpiarTemp = (id: number) => {
@@ -82,9 +98,12 @@ export default function Calculadora() {
     }
 
     const handleCalcular = async () => {
-        if (!partidoId) return
-        const valoresFactores: Record<string, number> = {}
-        factores.forEach(f => { valoresFactores[f.nombre] = valores[f.id] ?? 0 })
+        if (!partidoId || todosNA) return
+        // N/A se manda como null: el back lo saca del cálculo pero guarda el peso
+        const valoresFactores: Record<string, number | null> = {}
+        factores.forEach(f => {
+            valoresFactores[f.nombre] = noAplica[f.id] ? null : (valores[f.id] ?? 0)
+        })
         const res = await createCalculo({ partido_id: partidoId, valores_factores: valoresFactores })
         setResultado({
             prob_local: res.data.probabilidad_local,
@@ -202,7 +221,7 @@ export default function Calculadora() {
                         <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">Partido — Fecha {searchParams.get('partido') ? partidoSeleccionado?.fecha_num : 'actual'}</div>
                         <select
                             value={partidoId ?? ''}
-                            onChange={e => { setPartidoId(Number(e.target.value)); setResultado(null) }}
+                            onChange={e => { setPartidoId(Number(e.target.value)); limpiarCalculadora() }}
                             className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
                         >
                             <option value="">— Elegí un partido —</option>
@@ -220,31 +239,48 @@ export default function Calculadora() {
                                 Puntaje relativo al <strong className="text-white">Local</strong>
                             </div>
                             <div className="grid grid-cols-2 gap-x-8 gap-y-4">
-                                {factores.map(f => (
-                                    <div key={f.id}>
-                                        <div className="flex justify-between text-sm mb-1">
-                                            <span className="text-gray-300">
-                                                {f.nombre} <span className="text-xs text-gray-600">({porcentaje(f.peso)}%)</span>
-                                            </span>
-                                            <span className={`font-bold ${(valores[f.id] ?? 0) > 0 ? 'text-green-400' : (valores[f.id] ?? 0) < 0 ? 'text-red-400' : 'text-gray-400'}`}>
-                                                {valores[f.id] ?? 0}
-                                            </span>
+                                {factores.map(f => {
+                                    const na = !!noAplica[f.id]
+                                    const valor = valores[f.id] ?? 0
+                                    return (
+                                        <div key={f.id} className={na ? 'opacity-40' : ''}>
+                                            <div className="flex justify-between items-center text-sm mb-1">
+                                                <span className="text-gray-300">
+                                                    {f.nombre}{' '}
+                                                    <span className="text-xs text-gray-600">
+                                                        ({na ? '—' : `${porcentaje(f.peso, sumaPartido)}%`})
+                                                    </span>
+                                                </span>
+                                                <span className={`font-bold ${na ? 'text-gray-500' : valor > 0 ? 'text-green-400' : valor < 0 ? 'text-red-400' : 'text-gray-400'}`}>
+                                                    {na ? 'N/A' : valor}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-xs text-gray-600">
+                                                <span>-2</span>
+                                                <input
+                                                    type="range"
+                                                    min={-2}
+                                                    max={2}
+                                                    step={1}
+                                                    value={valor}
+                                                    disabled={na}
+                                                    onChange={e => setValores({ ...valores, [f.id]: Number(e.target.value) })}
+                                                    className="flex-1 accent-green-500 disabled:cursor-not-allowed"
+                                                />
+                                                <span>+2</span>
+                                                <button
+                                                    onClick={() => toggleNA(f.id)}
+                                                    className={`ml-1 text-[10px] font-semibold px-2 py-0.5 rounded border transition-colors ${na
+                                                        ? 'bg-gray-600 border-gray-500 text-white'
+                                                        : 'border-gray-700 text-gray-500 hover:text-gray-300 hover:border-gray-500'
+                                                        }`}
+                                                >
+                                                    N/A
+                                                </button>
+                                            </div>
                                         </div>
-                                        <div className="flex items-center gap-2 text-xs text-gray-600">
-                                            <span>-2</span>
-                                            <input
-                                                type="range"
-                                                min={-2}
-                                                max={2}
-                                                step={1}
-                                                value={valores[f.id] ?? 0}
-                                                onChange={e => setValores({ ...valores, [f.id]: Number(e.target.value) })}
-                                                className="flex-1 accent-green-500"
-                                            />
-                                            <span>+2</span>
-                                        </div>
-                                    </div>
-                                ))}
+                                    )
+                                })}
                             </div>
                         </div>
                     )}
@@ -266,14 +302,14 @@ export default function Calculadora() {
 
                     <div className="flex justify-end gap-3">
                         <button
-                            onClick={() => { setValores({}); setResultado(null) }}
+                            onClick={limpiarCalculadora}
                             className="px-4 py-2 text-sm border border-gray-600 rounded hover:bg-gray-800"
                         >
                             Limpiar
                         </button>
                         <button
                             onClick={handleCalcular}
-                            disabled={!partidoId}
+                            disabled={!partidoId || todosNA}
                             className="px-4 py-2 text-sm bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed rounded font-medium"
                         >
                             Calcular →

@@ -15,7 +15,7 @@ export const updateCuotas = (id: number, data: { cuota_local_betsson?: number; c
     api.patch<Partido>(`/partidos/${id}/cuotas`, data)
 
 // Calculos
-export const createCalculo = (data: { partido_id: number; valores_factores: Record<string, number> }) =>
+export const createCalculo = (data: { partido_id: number; valores_factores: Record<string, number | null> }) =>
     api.post<Calculo>('/calculos', data)
 export const getCalculosByPartido = (partido_id: number) =>
     api.get<Calculo[]>(`/calculos/partido/${partido_id}`)

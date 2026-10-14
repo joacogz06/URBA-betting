@@ -28,7 +28,7 @@ export interface Calculo {
     partido_id: number
     probabilidad_local: number
     probabilidad_visitante: number
-    valores_factores: Record<string, number>
+    valores_factores: Record<string, number | null>
     pesos_factores: Record<string, number>
     created_at: string
 }

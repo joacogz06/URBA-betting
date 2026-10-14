@@ -24,10 +24,15 @@ def _calcular_probabilidades(valores: dict, factores: list[Factor]) -> tuple[flo
     for f in factores:
         if not f.activo:
             continue
-        v = valores.get(f.nombre, 0)
+        # Guardamos SIEMPRE el peso: es la configuración de la fecha (sirve para el análisis)
+        pesos_usados[f.nombre] = f.peso
+
+        v = valores.get(f.nombre)
+        if v is None:
+            # N/A: el factor no aplica a este partido → no cuenta ni arriba ni abajo
+            continue
         suma_ponderada += v * f.peso
         suma_pesos += f.peso
-        pesos_usados[f.nombre] = f.peso
 
     # Promedio ponderado: siempre entre -2 y +2, sin importar cuántos factores haya
     score = suma_ponderada / suma_pesos if suma_pesos > 0 else 0.0
