@@ -29,6 +29,7 @@ export default function Calculadora() {
                 if (partidoParam) setPartidoId(Number(partidoParam))
             })
         })
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
     // Peso que se está mostrando: el que se está tipeando o el guardado
