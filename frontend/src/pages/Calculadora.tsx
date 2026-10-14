@@ -8,6 +8,8 @@ export default function Calculadora() {
     const [partidos, setPartidos] = useState<Partido[]>([])
     const [editando, setEditando] = useState(false)
     const [nuevoFactor, setNuevoFactor] = useState('')
+    const [nuevoPeso, setNuevoPeso] = useState('')
+    const [pesosTemp, setPesosTemp] = useState<Record<number, string>>({})
     const [partidoId, setPartidoId] = useState<number | null>(null)
     const [valores, setValores] = useState<Record<number, number>>({})
     const [resultado, setResultado] = useState<{ prob_local: number; prob_visitante: number; stake: number } | null>(null)
@@ -28,23 +30,55 @@ export default function Calculadora() {
         })
     }, [])
 
-    const sumaP = factores.reduce((s, f) => s + f.peso, 0)
-
-    const handleAgregarFactor = async () => {
-        if (!nuevoFactor.trim()) return
-        const res = await createFactor({ nombre: nuevoFactor, peso: 1, activo: true, orden: factores.length })
-        setFactores([...factores, res.data])
-        setNuevoFactor('')
+    // Peso que se está mostrando: el que se está tipeando o el guardado
+    const pesoActual = (f: Factor): number => {
+        const temp = pesosTemp[f.id]
+        if (temp === undefined) return f.peso
+        const n = Number(temp)
+        return isNaN(n) || n < 0 ? 0 : n
     }
 
-    const handlePeso = async (f: Factor, peso: number) => {
+    const sumaP = factores.reduce((s, f) => s + pesoActual(f), 0)
+
+    const porcentaje = (peso: number): string => {
+        if (sumaP <= 0) return '0'
+        return String(Number((peso / sumaP * 100).toFixed(1)))
+    }
+
+    const limpiarTemp = (id: number) => {
+        setPesosTemp(prev => {
+            const copia = { ...prev }
+            delete copia[id]
+            return copia
+        })
+    }
+
+    const handleGuardarPeso = async (f: Factor) => {
+        const raw = pesosTemp[f.id]
+        if (raw === undefined) return
+        const peso = Number(raw)
+        if (raw.trim() === '' || isNaN(peso) || peso < 0 || peso === f.peso) {
+            limpiarTemp(f.id)
+            return
+        }
         await updateFactor(f.id, { peso })
-        setFactores(factores.map(x => x.id === f.id ? { ...x, peso } : x))
+        setFactores(prev => prev.map(x => x.id === f.id ? { ...x, peso } : x))
+        limpiarTemp(f.id)
+    }
+
+    const handleAgregarFactor = async () => {
+        const peso = Number(nuevoPeso)
+        if (!nuevoFactor.trim() || !nuevoPeso || isNaN(peso) || peso <= 0) return
+        const res = await createFactor({ nombre: nuevoFactor.trim(), peso, activo: true, orden: factores.length })
+        setFactores([...factores, res.data])
+        setNuevoFactor('')
+        setNuevoPeso('')
     }
 
     const handleEliminar = async (id: number) => {
         await deleteFactor(id)
         setFactores(factores.filter(f => f.id !== id))
+        limpiarTemp(id)
     }
 
     const handleCalcular = async () => {
@@ -60,6 +94,8 @@ export default function Calculadora() {
     }
 
     const partidoSeleccionado = partidos.find(p => p.id === partidoId)
+    const nuevoPesoNum = Number(nuevoPeso)
+    const puedeAgregar = nuevoFactor.trim() !== '' && nuevoPeso !== '' && !isNaN(nuevoPesoNum) && nuevoPesoNum > 0
 
     return (
         <div className="p-6 space-y-4">
@@ -70,7 +106,7 @@ export default function Calculadora() {
                             Factores y pesos
                         </h2>
                         <span className="text-xs text-gray-500">
-                            {factores.length} factores · Suma de pesos: {sumaP}
+                            {factores.length} factores · Total: {Number(sumaP.toFixed(2))}
                         </span>
                     </div>
                     <button
@@ -83,24 +119,38 @@ export default function Calculadora() {
 
                 {editando ? (
                     <div className="p-4 space-y-2">
+                        <div className="flex items-center justify-end gap-3 text-[10px] text-gray-600 uppercase tracking-wider pr-7">
+                            <span className="w-20 text-center">Peso</span>
+                            <span className="w-14 text-right">% total</span>
+                        </div>
                         {factores.map(f => (
                             <div key={f.id} className="flex items-center justify-between py-2 border-b border-gray-800">
                                 <span className="text-sm">{f.nombre}</span>
                                 <div className="flex items-center gap-3">
-                                    <span className="text-xs text-gray-500">Peso</span>
-                                    <select
-                                        value={f.peso}
-                                        onChange={e => handlePeso(f, Number(e.target.value))}
-                                        className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm"
-                                    >
-                                        {[0.5, 1, 1.5, 2, 2.5, 3].map(v => (
-                                            <option key={v} value={v}>{v}</option>
-                                        ))}
-                                    </select>
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        step="any"
+                                        value={pesosTemp[f.id] ?? String(f.peso)}
+                                        onChange={e => setPesosTemp(prev => ({ ...prev, [f.id]: e.target.value }))}
+                                        onBlur={() => handleGuardarPeso(f)}
+                                        onKeyDown={e => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+                                        className="w-20 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm text-center"
+                                    />
+                                    <span className="w-14 text-right text-sm text-green-400 font-medium">
+                                        {porcentaje(pesoActual(f))}%
+                                    </span>
                                     <button onClick={() => handleEliminar(f.id)} className="text-gray-600 hover:text-red-400 text-xs">✕</button>
                                 </div>
                             </div>
                         ))}
+
+                        {sumaP <= 0 && factores.length > 0 && (
+                            <div className="text-xs text-red-400 pt-1">
+                                La suma de pesos es 0: el cálculo va a dar siempre 50%.
+                            </div>
+                        )}
+
                         <div className="flex items-center gap-2 pt-2">
                             <input
                                 type="text"
@@ -110,9 +160,20 @@ export default function Calculadora() {
                                 onKeyDown={e => e.key === 'Enter' && handleAgregarFactor()}
                                 className="bg-gray-800 border border-gray-600 rounded px-3 py-1 text-sm flex-1"
                             />
+                            <input
+                                type="number"
+                                min={0}
+                                step="any"
+                                placeholder="Peso"
+                                value={nuevoPeso}
+                                onChange={e => setNuevoPeso(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && handleAgregarFactor()}
+                                className="w-20 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm text-center"
+                            />
                             <button
                                 onClick={handleAgregarFactor}
-                                className="text-sm border border-gray-600 px-3 py-1 rounded hover:bg-gray-800"
+                                disabled={!puedeAgregar}
+                                className="text-sm border border-gray-600 px-3 py-1 rounded hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
                             >
                                 + Agregar
                             </button>
@@ -123,7 +184,7 @@ export default function Calculadora() {
                         {factores.map(f => (
                             <div key={f.id} className="bg-gray-800 border border-gray-700 rounded px-3 py-1 text-sm flex items-center gap-2">
                                 <span>{f.nombre}</span>
-                                <span className="text-green-400 font-medium">×{f.peso}</span>
+                                <span className="text-green-400 font-medium">{porcentaje(f.peso)}%</span>
                             </div>
                         ))}
                     </div>
@@ -162,7 +223,9 @@ export default function Calculadora() {
                                 {factores.map(f => (
                                     <div key={f.id}>
                                         <div className="flex justify-between text-sm mb-1">
-                                            <span className="text-gray-300">{f.nombre}</span>
+                                            <span className="text-gray-300">
+                                                {f.nombre} <span className="text-xs text-gray-600">({porcentaje(f.peso)}%)</span>
+                                            </span>
                                             <span className={`font-bold ${(valores[f.id] ?? 0) > 0 ? 'text-green-400' : (valores[f.id] ?? 0) < 0 ? 'text-red-400' : 'text-gray-400'}`}>
                                                 {valores[f.id] ?? 0}
                                             </span>

@@ -9,6 +9,7 @@ from app.schemas.schemas import CalculoCreate, CalculoOut
 router = APIRouter(prefix="/calculos", tags=["calculos"])
 
 EDGE_MINIMO = 0.05  # 5% de edge mínimo para considerar que hay valor
+K_SENSIBILIDAD = 1.5  # score normalizado ±2 → ~95% / ~5%
 
 
 def _sigmoide(s: float) -> float:
@@ -17,16 +18,21 @@ def _sigmoide(s: float) -> float:
 
 def _calcular_probabilidades(valores: dict, factores: list[Factor]) -> tuple[float, float, dict]:
     pesos_usados = {}
-    score = 0.0
+    suma_ponderada = 0.0
+    suma_pesos = 0.0
 
     for f in factores:
         if not f.activo:
             continue
         v = valores.get(f.nombre, 0)
-        score += v * f.peso
+        suma_ponderada += v * f.peso
+        suma_pesos += f.peso
         pesos_usados[f.nombre] = f.peso
 
-    prob_local = round(_sigmoide(score) * 100, 1)
+    # Promedio ponderado: siempre entre -2 y +2, sin importar cuántos factores haya
+    score = suma_ponderada / suma_pesos if suma_pesos > 0 else 0.0
+
+    prob_local = round(_sigmoide(score * K_SENSIBILIDAD) * 100, 1)
     prob_local = max(5.0, min(95.0, prob_local))
     prob_visitante = round(100 - prob_local, 1)
     return prob_local, prob_visitante, pesos_usados
