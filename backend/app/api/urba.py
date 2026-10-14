@@ -2,12 +2,21 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.models import Partido
+from app.api.apuestas import liquidar_apuesta
 from app.services.urba_client import get_posiciones, get_fixture
 from app.config import settings
 import re
 from datetime import datetime, timedelta, timezone
 
 router = APIRouter(prefix="/urba", tags=["urba"])
+
+
+def _to_int(valor) -> int | None:
+    """URBA puede mandar el score como número o como texto: lo normalizamos a int."""
+    try:
+        return int(valor)
+    except (TypeError, ValueError):
+        return None
 
 
 def _get_sabado_referencia() -> datetime:
@@ -92,6 +101,7 @@ async def sync_fixture(db: Session = Depends(get_db)):
     """
     Llama a la API de URBA, recorre rounds y matches,
     e inserta/actualiza los partidos en la DB local.
+    Además liquida las apuestas pendientes de los partidos ya jugados.
     """
     try:
         data = await get_fixture()
@@ -107,6 +117,7 @@ async def sync_fixture(db: Session = Depends(get_db)):
 
     creados = 0
     actualizados = 0
+    liquidadas = 0
 
     for ronda in rounds:
         round_name: str = ronda.get("name", "")
@@ -132,8 +143,8 @@ async def sync_fixture(db: Session = Depends(get_db)):
                     pass
 
             fulfilled: bool = m.get("fulfilled", False)
-            score_local = m.get("local_team_score") if fulfilled else None
-            score_visit = m.get("visit_team_score") if fulfilled else None
+            score_local = _to_int(m.get("local_team_score")) if fulfilled else None
+            score_visit = _to_int(m.get("visit_team_score")) if fulfilled else None
 
             existing = db.query(Partido).filter(Partido.urba_id == urba_id).first()
             if existing:
@@ -143,6 +154,25 @@ async def sync_fixture(db: Session = Depends(get_db)):
                 if fecha_hora:
                     existing.fecha_hora = fecha_hora
                 actualizados += 1
+
+                # Liquidar apuesta pendiente si el partido ya se jugó.
+                # El empate cuenta como perdida para cualquier lado (no se modela).
+                apuesta = existing.apuesta
+                if (
+                    apuesta is not None
+                    and apuesta.resultado is None
+                    and fulfilled
+                    and score_local is not None
+                    and score_visit is not None
+                ):
+                    if score_local > score_visit:
+                        ganador = "local"
+                    elif score_visit > score_local:
+                        ganador = "visitante"
+                    else:
+                        ganador = None
+                    liquidar_apuesta(apuesta, apuesta.equipo_apostado == ganador)
+                    liquidadas += 1
             else:
                 nuevo = Partido(
                     urba_id=urba_id,
@@ -159,4 +189,9 @@ async def sync_fixture(db: Session = Depends(get_db)):
                 creados += 1
 
     db.commit()
-    return {"creados": creados, "actualizados": actualizados, "total_rounds": len(rounds)}
+    return {
+        "creados": creados,
+        "actualizados": actualizados,
+        "liquidadas": liquidadas,
+        "total_rounds": len(rounds),
+    }

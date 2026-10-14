@@ -57,6 +57,9 @@ export const getFechaFactores = (temporada: string, fecha_num: number) =>
 export const saveFechaFactores = (data: Omit<FechaFactores, 'id'>) =>
     api.post<FechaFactores>('/historial', data)
 
+export const syncFixture = () =>
+    api.post<{ creados: number; actualizados: number; liquidadas: number; total_rounds: number }>('/urba/sync-fixture')
+
 export const getFechaActual = () =>
     api.get('/urba/fecha-actual')
 

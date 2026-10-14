@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getApuestas, getPartidos, updateResultado, deleteApuesta } from '../api'
+import { getApuestas, getPartidos, updateResultado, deleteApuesta, syncFixture } from '../api'
 import type { Apuesta, Partido } from '../types'
 
 const TEMPORADAS = ['2026']
@@ -11,13 +11,16 @@ export default function Historial() {
     const [temporada, setTemporada] = useState('2026')
     const [fechaIdx, setFechaIdx] = useState(0)
     const [cancelConfirm, setCancelConfirm] = useState<number | null>(null)
+    const [sincronizando, setSincronizando] = useState(false)
+    const [mensajeSync, setMensajeSync] = useState<string | null>(null)
 
     useEffect(() => {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setLoading(true)
     }, [temporada])
 
-    useEffect(() => {
+    // Trae apuestas y partidos. irAlUltimo = saltar a la última fecha (solo en la carga inicial)
+    const cargarDatos = (irAlUltimo: boolean) =>
         Promise.all([
             getApuestas(),
             getPartidos({ temporada }),
@@ -27,13 +30,19 @@ export default function Historial() {
             pRes.data.forEach((p: Partido) => { pMap[p.id] = p })
             setApuestas(apList)
             setPartidosMap(pMap)
-            const fechas = getFechas(apList, pMap)
-            setFechaIdx(fechas.length > 0 ? fechas.length - 1 : 0)
+            if (irAlUltimo) {
+                const fechas = getFechas(apList, pMap)
+                setFechaIdx(fechas.length > 0 ? fechas.length - 1 : 0)
+            }
             setLoading(false)
         }).catch((err) => {
             console.error(err)
             setLoading(false)
         })
+
+    useEffect(() => {
+        cargarDatos(true)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [temporada])
 
     function getFechas(ap: Apuesta[], pm: Record<number, Partido>): number[] {
@@ -78,6 +87,24 @@ export default function Historial() {
         ))
     }
 
+    const handleSync = async () => {
+        setSincronizando(true)
+        setMensajeSync(null)
+        try {
+            const res = await syncFixture()
+            await cargarDatos(false)
+            const n = res.data.liquidadas
+            setMensajeSync(n === 0
+                ? 'Resultados al día. No había apuestas para liquidar.'
+                : `${n} apuesta${n === 1 ? '' : 's'} liquidada${n === 1 ? '' : 's'}.`)
+        } catch (err) {
+            console.error(err)
+            setMensajeSync('Error al traer resultados de URBA.')
+        } finally {
+            setSincronizando(false)
+        }
+    }
+
     const handleCancelar = async (id: number) => {
         await deleteApuesta(id)
         setApuestas(prev => prev.filter(a => a.id !== id))
@@ -91,20 +118,34 @@ export default function Historial() {
     return (
         <div className="p-6 space-y-5">
 
-            {/* Selector temporada */}
-            <div className="flex gap-2">
-                {TEMPORADAS.map(t => (
-                    <button
-                        key={t}
-                        onClick={() => setTemporada(t)}
-                        className={`px-4 py-1.5 rounded text-sm font-semibold border transition-colors ${temporada === t
+            {/* Selector temporada + sync */}
+            <div className="flex items-center justify-between gap-4">
+                <div className="flex gap-2">
+                    {TEMPORADAS.map(t => (
+                        <button
+                            key={t}
+                            onClick={() => setTemporada(t)}
+                            className={`px-4 py-1.5 rounded text-sm font-semibold border transition-colors ${temporada === t
                                 ? 'bg-green-600 border-green-600 text-white'
                                 : 'border-gray-600 text-gray-400 hover:border-gray-400'
-                            }`}
+                                }`}
+                        >
+                            {t}
+                        </button>
+                    ))}
+                </div>
+                <div className="flex items-center gap-3">
+                    {mensajeSync && (
+                        <span className="text-xs text-gray-400">{mensajeSync}</span>
+                    )}
+                    <button
+                        onClick={handleSync}
+                        disabled={sincronizando}
+                        className="border border-green-600 text-green-400 hover:bg-green-600 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed text-xs px-3 py-1.5 rounded transition-colors"
                     >
-                        {t}
+                        {sincronizando ? 'Actualizando...' : '↻ Actualizar resultados'}
                     </button>
-                ))}
+                </div>
             </div>
 
             {/* Stats totales */}
@@ -192,6 +233,9 @@ export default function Historial() {
                                         </div>
                                         <div className="text-xs text-gray-500 mt-0.5">
                                             {a.equipo_apostado} · ×{a.cuota}
+                                            {partido?.jugado && partido.score_local !== null && partido.score_visitante !== null && (
+                                                <span className="text-gray-400"> · Final {partido.score_local}–{partido.score_visitante}</span>
+                                            )}
                                         </div>
                                     </div>
 

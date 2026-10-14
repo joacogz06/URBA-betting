@@ -11,6 +11,17 @@ BANKROLL_KEY = "bankroll_inicial"
 BANKROLL_DEFAULT = 1000.0
 
 
+def liquidar_apuesta(apuesta: Apuesta, gano: bool) -> None:
+    """Marca la apuesta como ganada/perdida y calcula la ganancia neta."""
+    apuesta.resultado = gano
+    if gano:
+        # Ganó: ganancia neta = lo que cobró menos lo apostado
+        apuesta.ganancia_neta = round(apuesta.stake * apuesta.cuota - apuesta.stake, 2)
+    else:
+        # Perdió: se pierde el stake
+        apuesta.ganancia_neta = -apuesta.stake
+
+
 def _get_bankroll_inicial(db: Session) -> float:
     row = db.query(Config).filter(Config.clave == BANKROLL_KEY).first()
     return float(row.valor) if row else BANKROLL_DEFAULT
@@ -72,13 +83,7 @@ def cargar_resultado(apuesta_id: int, resultado: ApuestaResultado, db: Session =
     apuesta = db.query(Apuesta).filter(Apuesta.id == apuesta_id).first()
     if not apuesta:
         raise HTTPException(status_code=404, detail="Apuesta no encontrada")
-    apuesta.resultado = resultado.resultado
-    if resultado.resultado:
-        # Ganó: ganancia neta = lo que cobró menos lo apostado
-        apuesta.ganancia_neta = round(apuesta.stake * apuesta.cuota - apuesta.stake, 2)
-    else:
-        # Perdió: ya estaba descontado al crear, no cambia
-        apuesta.ganancia_neta = -apuesta.stake
+    liquidar_apuesta(apuesta, resultado.resultado)
     db.commit()
     db.refresh(apuesta)
     return apuesta
