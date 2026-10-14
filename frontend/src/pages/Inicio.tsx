@@ -429,7 +429,7 @@ export default function Inicio() {
                                                     </div>
                                                     <div>
                                                         <div className="text-gray-500 mb-1">Edge</div>
-                                                        <div className={`font-bold text-lg ${Math.abs(analisisActual.edge) >= 5 ? 'text-green-400' : 'text-red-400'}`}>
+                                                            <div className={`font-bold text-lg ${analisisActual.hay_valor ? 'text-green-400' : 'text-red-400'}`}>
                                                             {analisisActual.edge > 0 ? '+' : ''}{analisisActual.edge.toFixed(1)}%
                                                         </div>
                                                     </div>

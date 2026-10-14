@@ -43,57 +43,54 @@ def _calcular_probabilidades(valores: dict, factores: list[Factor]) -> tuple[flo
     return prob_local, prob_visitante, pesos_usados
 
 
+def _kelly(p: float, cuota: float) -> float:
+    """Quarter Kelly para una probabilidad propia p y una cuota decimal."""
+    if cuota <= 1:
+        return 0.0
+    f = (p * (cuota - 1) - (1 - p)) / (cuota - 1)
+    return max(0.0, f * 0.25)
+
+
 def _analisis_casa(prob_local: float, cuota_local: float | None, cuota_visitante: float | None) -> dict | None:
+    """
+    Evalúa cada lado con SU PROPIA cuota y se queda con el de mayor edge.
+    Sin cuota de visitante cargada, solo se evalúa el local: no se puede
+    saber si el visitante tiene valor sin conocer cuánto paga.
+    """
     if not cuota_local:
         return None
 
-    p = prob_local / 100
-    p_casa = 1 / cuota_local
-    edge_local = p - p_casa
+    p_local = prob_local / 100
+    p_vis = 1 - p_local
 
-    if abs(edge_local) >= EDGE_MINIMO:
-        if edge_local > 0:
-            # Apostar al local
-            f_kelly = (p * (cuota_local - 1) - (1 - p)) / (cuota_local - 1)
-            f_kelly = max(0.0, f_kelly * 0.25)
-            return {
-                "cuota": cuota_local,
-                "prob_casa": round(p_casa * 100, 1),
-                "edge": round(edge_local * 100, 1),
-                "apostar_a": "local",
-                "kelly_fraccion": round(f_kelly, 4),
-                "hay_valor": True,
-            }
-        else:
-            # Apostar al visitante
-            p_vis = 1 - p
-            if cuota_visitante:
-                cuota_vis = cuota_visitante
-            else:
-                p_casa_vis = 1 - p_casa
-                cuota_vis = 1 / p_casa_vis if p_casa_vis > 0 else None
-            if cuota_vis:
-                f_kelly = (p_vis * (cuota_vis - 1) - (1 - p_vis)) / (cuota_vis - 1)
-                f_kelly = max(0.0, f_kelly * 0.25)
-            else:
-                f_kelly = 0.0
-            return {
-                "cuota": cuota_vis or cuota_local,
-                "prob_casa": round((1 / cuota_vis * 100) if cuota_vis else (1 - p_casa) * 100, 1),
-                "edge": round(edge_local * 100, 1),
-                "apostar_a": "visitante",
-                "kelly_fraccion": round(f_kelly, 4),
-                "hay_valor": True,
-            }
-    else:
-        return {
-            "cuota": cuota_local,
-            "prob_casa": round(p_casa * 100, 1),
-            "edge": round(edge_local * 100, 1),
-            "apostar_a": None,
-            "kelly_fraccion": 0.0,
-            "hay_valor": False,
-        }
+    lados = [{
+        "apostar_a": "local",
+        "cuota": cuota_local,
+        "p": p_local,
+        "p_casa": 1 / cuota_local,
+    }]
+    if cuota_visitante:
+        lados.append({
+            "apostar_a": "visitante",
+            "cuota": cuota_visitante,
+            "p": p_vis,
+            "p_casa": 1 / cuota_visitante,
+        })
+
+    for lado in lados:
+        lado["edge"] = lado["p"] - lado["p_casa"]
+
+    mejor = max(lados, key=lambda l: l["edge"])
+    hay_valor = mejor["edge"] >= EDGE_MINIMO
+
+    return {
+        "cuota": mejor["cuota"],
+        "prob_casa": round(mejor["p_casa"] * 100, 1),
+        "edge": round(mejor["edge"] * 100, 1),
+        "apostar_a": mejor["apostar_a"] if hay_valor else None,
+        "kelly_fraccion": round(_kelly(mejor["p"], mejor["cuota"]), 4) if hay_valor else 0.0,
+        "hay_valor": hay_valor,
+    }
 
 
 @router.post("/", response_model=CalculoOut, status_code=201)
@@ -140,11 +137,11 @@ def ultimos_calculos(db: Session = Depends(get_db)):
         # ¿hay valor en alguna casa?
         hay_valor = any(x and x["hay_valor"] for x in [betsson, codere])
 
-        # Mejor casa: la de mayor |edge| con valor
+        # Mejor casa: la de mayor edge con valor
         mejor = None
         casas_con_valor = [(n, x) for n, x in [("betsson", betsson), ("codere", codere)] if x and x["hay_valor"]]
         if casas_con_valor:
-            mejor = max(casas_con_valor, key=lambda nc: abs(nc[1]["edge"]))[0]
+            mejor = max(casas_con_valor, key=lambda nc: nc[1]["edge"])[0]
 
         resultado[c.partido_id] = {
             "prob_local": c.probabilidad_local,
