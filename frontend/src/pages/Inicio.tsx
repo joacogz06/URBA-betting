@@ -22,7 +22,12 @@ export default function Inicio() {
     const [loading, setLoading] = useState(true)
     const [fechaActual, setFechaActual] = useState<number | null>(null)
     const [editandoCuotas, setEditandoCuotas] = useState(false)
-    const [cuotasTemp, setCuotasTemp] = useState<Record<number, { betsson: string; codere: string }>>({})
+    const [cuotasTemp, setCuotasTemp] = useState<Record<number, {
+        betsson_local: string
+        betsson_vis: string
+        codere_local: string
+        codere_vis: string
+    }>>({})
     const [misCalculos, setMisCalculos] = useState<MisCalculos>({})
     const [modalApuesta, setModalApuesta] = useState<ModalApuesta | null>(null)
     const [casaSeleccionada, setCasaSeleccionada] = useState<'betsson' | 'codere'>('betsson')
@@ -67,11 +72,13 @@ export default function Inicio() {
     const formatMoney = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 
     const abrirEditorCuotas = () => {
-        const init: Record<number, { betsson: string; codere: string }> = {}
+        const init: Record<number, { betsson_local: string; betsson_vis: string; codere_local: string; codere_vis: string }> = {}
         partidos.forEach(p => {
             init[p.id] = {
-                betsson: p.cuota_local_betsson?.toString() ?? '',
-                codere: p.cuota_local_codere?.toString() ?? '',
+                betsson_local: p.cuota_local_betsson?.toString() ?? '',
+                betsson_vis: p.cuota_visitante_betsson?.toString() ?? '',
+                codere_local: p.cuota_local_codere?.toString() ?? '',
+                codere_vis: p.cuota_visitante_codere?.toString() ?? '',
             }
         })
         setCuotasTemp(init)
@@ -81,12 +88,20 @@ export default function Inicio() {
     const guardarCuota = async (partidoId: number) => {
         const c = cuotasTemp[partidoId]
         await api.patch(`/partidos/${partidoId}/cuotas`, {
-            cuota_local_betsson: c.betsson ? Number(c.betsson) : null,
-            cuota_local_codere: c.codere ? Number(c.codere) : null,
+            cuota_local_betsson: c.betsson_local ? Number(c.betsson_local) : null,
+            cuota_visitante_betsson: c.betsson_vis ? Number(c.betsson_vis) : null,
+            cuota_local_codere: c.codere_local ? Number(c.codere_local) : null,
+            cuota_visitante_codere: c.codere_vis ? Number(c.codere_vis) : null,
         })
         setPartidos(prev => prev.map(p =>
             p.id === partidoId
-                ? { ...p, cuota_local_betsson: c.betsson ? Number(c.betsson) : null, cuota_local_codere: c.codere ? Number(c.codere) : null }
+                ? {
+                    ...p,
+                    cuota_local_betsson: c.betsson_local ? Number(c.betsson_local) : null,
+                    cuota_visitante_betsson: c.betsson_vis ? Number(c.betsson_vis) : null,
+                    cuota_local_codere: c.codere_local ? Number(c.codere_local) : null,
+                    cuota_visitante_codere: c.codere_vis ? Number(c.codere_vis) : null,
+                }
                 : p
         ))
     }
@@ -122,7 +137,6 @@ export default function Inicio() {
             cuota: analisis.cuota,
         })
         setApuestasExistentes(prev => new Set(prev).add(modalApuesta.partido.id))
-        // Actualizar bankroll mostrado (se descontó el stake)
         const bankrollRes = await getBankroll()
         setBankroll(bankrollRes.data.bankroll)
         setModalApuesta(null)
@@ -262,10 +276,10 @@ export default function Inicio() {
                                                             onClick={() => abrirModalApuesta(p)}
                                                             disabled={yaApostado}
                                                             className={`text-xs font-semibold px-2 py-1 rounded transition-colors ${yaApostado
-                                                                    ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                                                                    : calc.hay_valor
-                                                                        ? 'bg-green-700 hover:bg-green-600 text-white'
-                                                                        : 'bg-red-900/60 hover:bg-red-800/60 text-red-300'
+                                                                ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                                                                : calc.hay_valor
+                                                                    ? 'bg-green-700 hover:bg-green-600 text-white'
+                                                                    : 'bg-red-900/60 hover:bg-red-800/60 text-red-300'
                                                                 }`}
                                                         >
                                                             Apostar
@@ -288,7 +302,7 @@ export default function Inicio() {
             {/* Modal editar cuotas */}
             {editandoCuotas && (
                 <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-                    <div className="bg-gray-900 border border-gray-700 rounded-lg w-full max-w-lg p-6 space-y-4">
+                    <div className="bg-gray-900 border border-gray-700 rounded-lg w-full max-w-2xl p-6 space-y-4">
                         <div className="flex items-center justify-between">
                             <h2 className="text-sm font-semibold text-green-400 tracking-widest uppercase">Editar cuotas</h2>
                             <button onClick={() => setEditandoCuotas(false)} className="text-gray-500 hover:text-white text-lg">✕</button>
@@ -297,33 +311,34 @@ export default function Inicio() {
                             <thead>
                                 <tr className="text-gray-500 text-xs">
                                     <th className="py-2 text-left">Partido</th>
-                                    <th className="py-2 text-center">Betsson</th>
-                                    <th className="py-2 text-center">Codere</th>
+                                    <th className="py-1 text-center" colSpan={2}>Betsson</th>
+                                    <th className="py-1 text-center" colSpan={2}>Codere</th>
                                     <th className="py-2"></th>
+                                </tr>
+                                <tr className="text-gray-600 text-xs">
+                                    <th></th>
+                                    <th className="py-1 text-center">Local</th>
+                                    <th className="py-1 text-center">Visit.</th>
+                                    <th className="py-1 text-center">Local</th>
+                                    <th className="py-1 text-center">Visit.</th>
+                                    <th></th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {partidos.map(p => (
                                     <tr key={p.id} className="border-t border-gray-800">
                                         <td className="py-2 pr-4 text-xs">{p.local} vs {p.visitante}</td>
-                                        <td className="py-2 px-2">
-                                            <input
-                                                type="number" step="0.01"
-                                                value={cuotasTemp[p.id]?.betsson ?? ''}
-                                                onChange={e => setCuotasTemp(prev => ({ ...prev, [p.id]: { ...prev[p.id], betsson: e.target.value } }))}
-                                                className="w-20 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-center text-white text-xs"
-                                                placeholder="—"
-                                            />
-                                        </td>
-                                        <td className="py-2 px-2">
-                                            <input
-                                                type="number" step="0.01"
-                                                value={cuotasTemp[p.id]?.codere ?? ''}
-                                                onChange={e => setCuotasTemp(prev => ({ ...prev, [p.id]: { ...prev[p.id], codere: e.target.value } }))}
-                                                className="w-20 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-center text-white text-xs"
-                                                placeholder="—"
-                                            />
-                                        </td>
+                                        {(['betsson_local', 'betsson_vis', 'codere_local', 'codere_vis'] as const).map(campo => (
+                                            <td key={campo} className="py-2 px-1">
+                                                <input
+                                                    type="number" step="0.01"
+                                                    value={cuotasTemp[p.id]?.[campo] ?? ''}
+                                                    onChange={e => setCuotasTemp(prev => ({ ...prev, [p.id]: { ...prev[p.id], [campo]: e.target.value } }))}
+                                                    className="w-16 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-center text-white text-xs"
+                                                    placeholder="—"
+                                                />
+                                            </td>
+                                        ))}
                                         <td className="py-2 pl-2">
                                             <button onClick={() => guardarCuota(p.id)} className="text-xs text-green-400 hover:text-green-300">Guardar</button>
                                         </td>
@@ -340,7 +355,7 @@ export default function Inicio() {
 
             {/* Modal apostar */}
             {modalApuesta && (() => {
-                const { partido, calculo, bankrollActual } = modalApuesta  // ← esta línea falta
+                const { partido, calculo, bankrollActual } = modalApuesta
                 const casas: Array<{ key: 'betsson' | 'codere'; label: string }> = (
                     [
                         { key: 'betsson' as const, label: 'Betsson' },
@@ -365,7 +380,6 @@ export default function Inicio() {
                                 <div className="text-xs text-gray-500 mt-0.5">Fecha {partido.fecha_num}</div>
                             </div>
 
-                            {/* Mis probabilidades */}
                             <div className="grid grid-cols-2 gap-2">
                                 <div className="bg-gray-800 rounded p-3 text-center">
                                     <div className="text-xs text-gray-500 mb-1">{partido.local}</div>
@@ -377,7 +391,6 @@ export default function Inicio() {
                                 </div>
                             </div>
 
-                            {/* Tabs por casa */}
                             {casas.length === 0 ? (
                                 <div className="text-center text-gray-500 text-sm py-4">Sin cuotas cargadas para este partido</div>
                             ) : (
@@ -388,8 +401,8 @@ export default function Inicio() {
                                                 key={key}
                                                 onClick={() => { setCasaSeleccionada(key); setStakeCustom('') }}
                                                 className={`flex-1 py-2 px-3 rounded border text-sm font-medium transition-colors relative ${casaSeleccionada === key
-                                                        ? 'bg-gray-700 border-gray-500 text-white'
-                                                        : 'border-gray-700 text-gray-400 hover:border-gray-600'
+                                                    ? 'bg-gray-700 border-gray-500 text-white'
+                                                    : 'border-gray-700 text-gray-400 hover:border-gray-600'
                                                     }`}
                                             >
                                                 {label}

@@ -19,6 +19,8 @@ export interface Partido {
     score_visitante: number | null
     cuota_local_betsson: number | null
     cuota_local_codere: number | null
+    cuota_visitante_betsson: number | null
+    cuota_visitante_codere: number | null
 }
 
 export interface Calculo {

@@ -40,6 +40,8 @@ class Partido(Base):
     # Cuotas manuales
     cuota_local_betsson: Mapped[float] = mapped_column(Float, nullable=True)
     cuota_local_codere: Mapped[float] = mapped_column(Float, nullable=True)
+    cuota_visitante_betsson: Mapped[float] = mapped_column(Float, nullable=True)
+    cuota_visitante_codere: Mapped[float] = mapped_column(Float, nullable=True)
 
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

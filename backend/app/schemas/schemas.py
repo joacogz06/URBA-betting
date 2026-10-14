@@ -40,6 +40,8 @@ class PartidoCreate(PartidoBase):
 class PartidoCuotasUpdate(BaseModel):
     cuota_local_betsson: Optional[float] = None
     cuota_local_codere: Optional[float] = None
+    cuota_visitante_betsson: Optional[float] = None
+    cuota_visitante_codere: Optional[float] = None
 
 class PartidoOut(PartidoBase):
     id: int
@@ -48,6 +50,8 @@ class PartidoOut(PartidoBase):
     score_visitante: Optional[int] = None
     cuota_local_betsson: Optional[float] = None
     cuota_local_codere: Optional[float] = None
+    cuota_visitante_betsson: Optional[float] = None
+    cuota_visitante_codere: Optional[float] = None
     updated_at: datetime
     model_config = {"from_attributes": True}
 

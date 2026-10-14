@@ -32,24 +32,21 @@ def _calcular_probabilidades(valores: dict, factores: list[Factor]) -> tuple[flo
     return prob_local, prob_visitante, pesos_usados
 
 
-def _analisis_casa(prob_local: float, cuota: float | None) -> dict | None:
-    """Calcula edge y Kelly para una casa dada la prob local y cuota del local."""
-    if not cuota:
+def _analisis_casa(prob_local: float, cuota_local: float | None, cuota_visitante: float | None) -> dict | None:
+    if not cuota_local:
         return None
 
     p = prob_local / 100
-    p_casa = 1 / cuota
-    edge_local = p - p_casa          # positivo → apostar local
-    edge_visitante = (1 - p) - (1 - p_casa)  # = -edge_local
+    p_casa = 1 / cuota_local
+    edge_local = p - p_casa
 
-    # Determinamos a quién apostar y con qué edge
     if abs(edge_local) >= EDGE_MINIMO:
         if edge_local > 0:
             # Apostar al local
-            f_kelly = (p * (cuota - 1) - (1 - p)) / (cuota - 1)
+            f_kelly = (p * (cuota_local - 1) - (1 - p)) / (cuota_local - 1)
             f_kelly = max(0.0, f_kelly * 0.25)
             return {
-                "cuota": cuota,
+                "cuota": cuota_local,
                 "prob_casa": round(p_casa * 100, 1),
                 "edge": round(edge_local * 100, 1),
                 "apostar_a": "local",
@@ -57,27 +54,29 @@ def _analisis_casa(prob_local: float, cuota: float | None) -> dict | None:
                 "hay_valor": True,
             }
         else:
-            # Apostar al visitante (cuota visitante = 1/(1-p_casa) aproximado, usamos el edge)
+            # Apostar al visitante
             p_vis = 1 - p
-            p_casa_vis = 1 - p_casa
-            # cuota visitante implícita
-            cuota_vis = 1 / p_casa_vis if p_casa_vis > 0 else None
+            if cuota_visitante:
+                cuota_vis = cuota_visitante
+            else:
+                p_casa_vis = 1 - p_casa
+                cuota_vis = 1 / p_casa_vis if p_casa_vis > 0 else None
             if cuota_vis:
                 f_kelly = (p_vis * (cuota_vis - 1) - (1 - p_vis)) / (cuota_vis - 1)
                 f_kelly = max(0.0, f_kelly * 0.25)
             else:
                 f_kelly = 0.0
             return {
-                "cuota": cuota,
-                "prob_casa": round(p_casa * 100, 1),
-                "edge": round(edge_local * 100, 1),   # negativo → visitante tiene valor
+                "cuota": cuota_vis or cuota_local,
+                "prob_casa": round((1 / cuota_vis * 100) if cuota_vis else (1 - p_casa) * 100, 1),
+                "edge": round(edge_local * 100, 1),
                 "apostar_a": "visitante",
                 "kelly_fraccion": round(f_kelly, 4),
                 "hay_valor": True,
             }
     else:
         return {
-            "cuota": cuota,
+            "cuota": cuota_local,
             "prob_casa": round(p_casa * 100, 1),
             "edge": round(edge_local * 100, 1),
             "apostar_a": None,
@@ -124,8 +123,8 @@ def ultimos_calculos(db: Session = Depends(get_db)):
     resultado = {}
     for c in calculos:
         partido = db.query(Partido).filter(Partido.id == c.partido_id).first()
-        betsson = _analisis_casa(c.probabilidad_local, partido.cuota_local_betsson if partido else None)
-        codere = _analisis_casa(c.probabilidad_local, partido.cuota_local_codere if partido else None)
+        betsson = _analisis_casa(c.probabilidad_local, partido.cuota_local_betsson if partido else None, partido.cuota_visitante_betsson if partido else None)
+        codere = _analisis_casa(c.probabilidad_local, partido.cuota_local_codere if partido else None, partido.cuota_visitante_codere if partido else None)
 
         # ¿hay valor en alguna casa?
         hay_valor = any(x and x["hay_valor"] for x in [betsson, codere])
